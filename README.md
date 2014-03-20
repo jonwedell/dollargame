@@ -1,4 +1,4 @@
 dollargame
 ==========
 
-Simulate the dollar game and predict game outcome.
+Simulate the dollar game and predict game winner.
