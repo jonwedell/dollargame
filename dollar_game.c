@@ -10,6 +10,7 @@ void print_dollars(int players[], int num_players){
     for (int i=0; i<num_players; i++){
         printf("Player %d has %d dollars left.\n", i, players[i]);
     }
+    printf("------------------------------\n");
 }
 
 // Check if there is only one player left
@@ -69,8 +70,29 @@ int simulate_game(int playray[], int num_players, int active_player, int remaini
         if (++active_player == num_players){ active_player = 0;}
     }
 
+
+    // Go to the last remaining player
+    while (playray[active_player] == 0){ if (++active_player == num_players){ active_player = 0;} }
+
     // Do the "final" role
-    do_roll(playray, num_players, active_player);
+    int play_dollars = playray[active_player];
+    int lost_dollars = do_roll(playray, num_players, active_player);
+    remaining_dollars -= lost_dollars;
+
+    // Rollover!
+    if (remaining_dollars == 0) {
+        return num_players;
+    }
+    // The player who rolled kept their dollars (or maybe put some in the center too)
+    else if (playray[active_player] + lost_dollars == play_dollars){
+        return active_player;
+    }
+
+    // There is at least one other player now
+     else {
+        if (++active_player == num_players){ active_player = 0;}
+        return simulate_game(playray, num_players, active_player, remaining_dollars);
+    }
 
     // Find out how many players remain
     int remaining_players = active_players(playray, num_players);
@@ -78,22 +100,30 @@ int simulate_game(int playray[], int num_players, int active_player, int remaini
     // There is more than one player again. Call ourselves.
     if ( remaining_players > 1){
         if (++active_player == num_players){ active_player = 0;}
-        printf("Added player. Active: %d\n", active_player);
         return simulate_game(playray, num_players, active_player, remaining_dollars);
+
     // There is one player left. They won!
     } else if (remaining_players == 1) {
-        return active_player;
+
+        // The player who rolled still has the dollar(s)
+        if (playray[active_player] > 0){
+            return active_player;
+
+        // There is still only one player, but it isn't the one who just rolled!
+        } else {
+            if (++active_player == num_players){ active_player = 0;}
+            return simulate_game(playray, num_players, active_player, remaining_dollars);
+        }
+
     // Rollover!
-    } else {
-        return num_players;
-    }
+    } else { return num_players; }
 }
 
 // Main method
 int main(int argc, char *argv[]){
 
     int players;
-    unsigned long trials = 100000;
+    unsigned long trials = 3000000;
 
     // Initialize the PRNG
     srand(time(NULL));
@@ -132,3 +162,4 @@ int main(int argc, char *argv[]){
 
     return 0;
 }
+
