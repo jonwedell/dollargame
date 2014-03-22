@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+unsigned long trials = 3000000;
 int init_dollars = 3;
 int dice = 3;
 
@@ -23,11 +24,12 @@ int active_players(int players[], int num_players){
 }
 
 // Do one roll for the given player
-int do_roll(int players[], int num_players, int active_player){
-    int play_dollars = players[active_player];
-    int removed_dollars = 0;
+void do_roll(int players[], int num_players, int active_player, int * dollars_remaining){
 
-    for (int each_dollar=0; (each_dollar < play_dollars) && (each_dollar < dice); each_dollar++){
+    // Only roll the number of dollars, or dice, whichever is lower
+    int cutoff = players[active_player] < dice ? players[active_player] : dice;
+
+    for (int each_dollar=0; each_dollar < cutoff; each_dollar++){
 
         // Roll the dice
         int roll = rand() % 6;
@@ -52,12 +54,10 @@ int do_roll(int players[], int num_players, int active_player){
                     players[0]++;
                 }
             } else if (roll == 5){
-                removed_dollars++;
+                (*dollars_remaining)--;
             }
         }
     }
-
-    return removed_dollars;
 }
 
 // Little recursive method to see a game to it's conclusion. Return winning player, or numplayers if draw.
@@ -65,65 +65,39 @@ int simulate_game(int playray[], int num_players, int active_player, int remaini
 
     // Narrow it down to one player
     while ((remaining_dollars > 5) || (active_players(playray, num_players) > 1)){
-        remaining_dollars -= do_roll(playray, num_players, active_player);
-
+        do_roll(playray, num_players, active_player, &remaining_dollars);
         if (++active_player == num_players){ active_player = 0;}
     }
-
 
     // Go to the last remaining player
     while (playray[active_player] == 0){ if (++active_player == num_players){ active_player = 0;} }
 
     // Do the "final" role
     int play_dollars = playray[active_player];
-    int lost_dollars = do_roll(playray, num_players, active_player);
-    remaining_dollars -= lost_dollars;
+    int cent = remaining_dollars;
+    do_roll(playray, num_players, active_player, &remaining_dollars);
+    int diff = cent - remaining_dollars;
 
     // Rollover!
     if (remaining_dollars == 0) {
         return num_players;
     }
     // The player who rolled kept their dollars (or maybe put some in the center too)
-    else if (playray[active_player] + lost_dollars == play_dollars){
+    else if (playray[active_player] + diff== play_dollars){
         return active_player;
     }
 
     // There is at least one other player now
-     else {
+    else {
         if (++active_player == num_players){ active_player = 0;}
         return simulate_game(playray, num_players, active_player, remaining_dollars);
     }
-
-    // Find out how many players remain
-    int remaining_players = active_players(playray, num_players);
-
-    // There is more than one player again. Call ourselves.
-    if ( remaining_players > 1){
-        if (++active_player == num_players){ active_player = 0;}
-        return simulate_game(playray, num_players, active_player, remaining_dollars);
-
-    // There is one player left. They won!
-    } else if (remaining_players == 1) {
-
-        // The player who rolled still has the dollar(s)
-        if (playray[active_player] > 0){
-            return active_player;
-
-        // There is still only one player, but it isn't the one who just rolled!
-        } else {
-            if (++active_player == num_players){ active_player = 0;}
-            return simulate_game(playray, num_players, active_player, remaining_dollars);
-        }
-
-    // Rollover!
-    } else { return num_players; }
 }
 
 // Main method
 int main(int argc, char *argv[]){
 
     int players;
-    unsigned long trials = 3000000;
 
     // Initialize the PRNG
     srand(time(NULL));
@@ -140,7 +114,6 @@ int main(int argc, char *argv[]){
 
     // Keep track of an ongoing game
     int playray[players];
-    int active_player;
 
     // Loop through the trials
     for (int trial=0; trial<trials; trial++){
@@ -158,7 +131,6 @@ int main(int argc, char *argv[]){
         printf("Player %d: %.2f\n", i, winray[i]/((double)trials)*100);
     }
     printf("Rollovers: %.2f\n", winray[players]/((double)trials)*100);
-
 
     return 0;
 }
