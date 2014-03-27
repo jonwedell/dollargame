@@ -182,7 +182,7 @@ void simulate_x_games(int x, int pipe){
 
 
 // Main method
-void main(int argc, char *argv[]){
+int main(int argc, char *argv[]){
 
     // Figure out how many cores we are working with
     processes = sysconf(_SC_NPROCESSORS_ONLN);
@@ -284,7 +284,7 @@ void main(int argc, char *argv[]){
     }
     printf("Rollovers: %.2f\n", winray[num_players]/((double)((trials/processes)*processes))*100);
 
-    exit(0);
+    return 0;
 }
 
 
