@@ -2,139 +2,121 @@
 #include <stdlib.h>
 #include <time.h>
 
-unsigned long trials = 3000000;
+unsigned long trials = 5000000;
 
 int init_dollars = 3;
 int dice = 3;
 int num_players;
 
-//#define skiprandom 1
-#ifdef skiprandom
-int rolls[100000];
-int next_roll = 0;
-#endif
+
+struct player {
+    int dollars;
+    struct player *next;
+    struct player *previous;
+    struct player *next_money;
+    struct player *previous_money;
+};
+
 
 // Print the number of dollar on the table
-void print_dollars(int players[]){
-    for (int i=0; i<num_players; i++){
-        printf("Player %d has %d dollars left.\n", i, players[i]);
-    }
-    printf("------------------------------\n");
-}
+void print_dollars(struct player * active_player){
+    struct player * cur_player = active_player;
+    int ordinal = 0;
 
-// Check if there is only one player left
-int active_players(int players[]){
-    int active = 0;
-    for (int i=0; i<num_players; i++){
-        if (players[i] > 0){ active++; }
-    }
-    return active;
-}
-
-// Check if adjacent players have money
-int adjacent_money(int players[], int active_player){
-
-    // Check left player
-    if (active_player > 0){
-        if (players[active_player-1] > 0){ return 1; }
-    } else {
-        if (players[num_players-1] > 0){ return 1; }
-    }
-
-    // Check right player
-    if (active_player < num_players -1){
-        if (players[active_player+1] > 0){ return 1;}
-    } else {
-        if (players[0] > 0){ return 1; }
-    }
-
-    // No money
-    return 0;
+    do {
+        printf("Player cur+%d: Money: %d\n", ordinal, cur_player->dollars);
+        cur_player = cur_player->next;
+        ordinal++;
+    } while (cur_player != active_player);
 }
 
 // Do one roll for the given player
-void do_roll(int players[], int active_player, int * dollars_remaining){
+void do_roll(struct player * active_player){
 
     // Only roll the number of dollars, or dice, whichever is lower
-    int cutoff = players[active_player] < dice ? players[active_player] : dice;
+    int cutoff = active_player->dollars < dice ? active_player->dollars : dice;
 
     for (int each_dollar=0; each_dollar < cutoff; each_dollar++){
 
         // Roll the dice
-        #ifdef skiprandom
-        int roll = rolls[next_roll];
-        if (++next_roll >= 100000){next_roll = 0;}
-        #else
         int roll = rand() % 6;
-        #endif
 
         // Only proceed here if they lost money
         if (roll > 2){
 
-            players[active_player]--;
+            active_player->dollars--;
 
             // Left player gets buck
             if (roll == 3){
-                if (active_player > 0){
-                    players[active_player-1]++;
-                } else {
-                    players[num_players-1]++;
+
+                if (active_player->previous_money != active_player->previous){
+                    active_player->previous_money->next_money = active_player->previous;
+                    active_player->previous->previous_money = active_player->previous_money;
                 }
+
+                if (active_player->dollars == 0){
+                    active_player->previous->next_money = active_player->next_money;
+                    active_player->next_money->previous_money = active_player->previous;
+                } else {
+                    active_player->previous->next_money = active_player;
+                }
+
+                active_player->previous->dollars++;
+                active_player->previous_money = active_player->previous;
+
             // Right player gets buck
             } else if (roll == 4){
-                if (active_player < num_players -1){
-                    players[active_player+1]++;
-                } else {
-                    players[0]++;
+
+                if (active_player->next_money != active_player->next){
+                    active_player->next_money->previous_money = active_player->next;
+                    active_player->next->next_money = active_player->next_money;
                 }
+
+                if (active_player->dollars > 0){
+                    active_player->next->previous_money = active_player;
+                } else {
+                    active_player->next->previous_money = active_player->previous_money;
+                    active_player->previous_money->next_money = active_player->next;
+                }
+
+                active_player->next->dollars++;
+                active_player->next_money = active_player->next;
+
+            // Dollar to the center
             } else if (roll == 5){
-                (*dollars_remaining)--;
+                if (active_player->dollars == 0){
+                    active_player->previous_money->next_money = active_player->next_money;
+                    active_player->next_money->previous_money = active_player->previous_money;
+                }
             }
         }
     }
 }
 
-void move_on(int players[], int * active_player){
-    while (players[(*active_player)] == 0){ if (++(*active_player) == num_players){ (*active_player) = 0;} }
-}
 
 // Little recursive method to see a game to it's conclusion. Return winning player, or numplayers if draw.
-int simulate_game(int playray[], int active_player, int remaining_dollars){
+struct player * simulate_game(struct player *  active_player){
 
-    // Narrow it down to one player
-    while ((remaining_dollars > 5) || (active_players(playray) > 1)){
-
-        // Skip to the next player with money
-        move_on(playray, &active_player);
-
-        // Do a roll
-        do_roll(playray, active_player, &remaining_dollars);
-        if (++active_player == num_players){ active_player = 0;}
+    // Have people take turns until there is only one player left
+    while (active_player->next_money != active_player){
+        do_roll(active_player);
+        active_player = active_player->next_money;
     }
-
-    // Go to the last remaining player
-    move_on(playray, &active_player);
 
     // Do the "final" role
-    int play_dollars = playray[active_player];
-    do_roll(playray, active_player, &remaining_dollars);
+    do_roll(active_player);
 
-    // Rollover!
-    if (remaining_dollars == 0) {
-        return num_players;
-    }
-    // They didn't lose any money - they win
-    else if (playray[active_player] == play_dollars){
-        return active_player;
-    }
-    // There is someone else
-    else if (adjacent_money(playray, active_player)){
-        if (++active_player == num_players){ active_player = 0;}
-        return simulate_game(playray, active_player, remaining_dollars);
-    }
-    // They still have money but put a bit in the center
-    else {
-        return active_player;
+    // If they are still the only player
+    if (active_player->next_money == active_player){
+        if (active_player->dollars != 0){
+            return active_player;
+        } else {
+            return NULL;
+        }
+
+    // We need to do more rolls, somebody else has money
+    } else {
+        return simulate_game(active_player->next_money);
     }
 }
 
@@ -145,15 +127,18 @@ int main(int argc, char *argv[]){
     srand(time(NULL));
     //srand(0);
 
-    #ifdef skiprandom
-    // Test fixed roll array
-    for (int i=0; i<100000; i++){ rolls[i] = rand() % 6;}
-    #endif
-
     // Verify the user input and convert it to a long
-    if ((argc != 2) || (!sscanf (argv[1],"%d",&num_players))){
+    if ((argc < 2) || (!sscanf (argv[1],"%d",&num_players))){
         printf("Specify number of players as argument!\n");
         return 1;
+    }
+
+    // Allow them to specify the number of trials
+    if (argc == 3){
+        if (!sscanf(argv[2],"%lu",&trials)){
+            printf("If you specify a second argument it must be the number of trials.\n");
+            return 2;
+        }
     }
 
     // Keep track of the results
@@ -161,21 +146,37 @@ int main(int argc, char *argv[]){
     for(int i=0;i<num_players+1;i++){ winray[i] = 0;}
 
     // Keep track of an ongoing game
-    int playray[num_players];
+    struct player players[num_players];
 
     // Loop through the trials
     for (int trial=0; trial<trials; trial++){
 
         // Initialize the game
-        for(int i=0;i<num_players;i++){ playray[i] = init_dollars;}
+        for(int i=0;i<num_players;i++){players[i].dollars = init_dollars; }
+        players[0].previous = &(players[num_players-1]);
+        players[0].previous_money = &(players[num_players-1]);
+        players[num_players-1].next = &(players[0]);
+        players[num_players-1].next_money = &(players[0]);
 
-        #ifdef skiprandom
-        // Go to a random point in the random simulator
-        next_roll = rand() % 99999;
-        #endif
+        for (int i=0; i<num_players-1; i++){
+            players[i].next = &(players[i+1]);
+            players[i].next_money = &(players[i+1]);
+        }
+        for (int i=num_players-1; i>0; i--){
+            players[i].previous = &(players[i-1]);
+            players[i].previous_money = &(players[i-1]);
+        }
 
         // Roll until there is one person left
-        winray[simulate_game(playray, 0, num_players * init_dollars)]++;
+        struct player * winrar = simulate_game((&players[0]));
+        if (winrar == NULL){ winray[num_players]++;} else {
+            for (int i=0; i<num_players; i++){
+                if (winrar == &(players[i])){
+                    winray[i]++;
+                    break;
+                }
+            }
+        }
     }
 
     // Print the results
