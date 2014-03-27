@@ -1,7 +1,11 @@
+// Basics
 #include <stdio.h>
 #include <stdlib.h>
+
+// To initialize the PRNG
 #include <time.h>
 
+// Stuff for the pipes and forking
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -11,8 +15,9 @@ unsigned long trials = 5000000;
 
 int init_dollars = 3;
 int dice = 3;
-int num_players;
-
+int num_players = 5;
+int static_prng = 0;
+int processes = 1;
 
 struct player {
     int dollars;
@@ -177,24 +182,60 @@ void simulate_x_games(int x, int pipe){
 
 
 // Main method
-int main(int argc, char *argv[]){
+void main(int argc, char *argv[]){
 
-    // Initialize the PRNG
-    srand(time(NULL));
-    //srand(0);
+    // Figure out how many cores we are working with
+    processes = sysconf(_SC_NPROCESSORS_ONLN);
 
-    // Verify the user input and convert it to a long
-    if ((argc < 2) || (!sscanf (argv[1],"%d",&num_players))){
-        printf("Specify number of players as argument!\n");
-        return 1;
-    }
-
-    // Allow them to specify the number of trials
-    if (argc == 3){
-        if (!sscanf(argv[2],"%lu",&trials)){
-            printf("If you specify a second argument it must be the number of trials.\n");
-            return 2;
+    // Parse the arguments
+    int index, c;
+    opterr = 0;
+    while ((c = getopt (argc, argv, "i:d:t:p:c:sh")) != -1){
+        switch (c){
+            case 'i':
+                dice = atoi(optarg);
+                break;
+            case 'd':
+                init_dollars = atoi(optarg);
+                break;
+            case 't':
+                trials = atol(optarg);
+                break;
+            case 'p':
+                num_players = atoi(optarg);
+                break;
+            case 'c':
+                processes = atoi(optarg);
+                break;
+            case 's':
+                static_prng = 1;
+                break;
+            case 'h':
+                printf("dollar_game [options]\n\
+    Options:\n\
+        -c num_processes\n\
+        -d starting_dollars\n\
+        -i num_dice\n\
+        -p num_players\n\
+        -s enable static PRNG seed.\n\
+        -t num_trials\n");
+        exit(0);
+                break;
+            case '?':
+                if ( (optopt == 'i') || (optopt == 'd') || (optopt == 't') || (optopt == 'p')){
+                    fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                } else {
+                    fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+                }
+                exit(1);
+            default:
+                abort();
         }
+    }
+    // No arguments - only options - allowed
+    if (optind != argc){
+        printf ("No positional arguments accepted. Use the options. Use -h for help.\n");
+        exit(1);
     }
 
 
@@ -203,11 +244,9 @@ int main(int argc, char *argv[]){
     for(int i=0;i<num_players+1;i++){ winray[i] = 0;}
 
 
-    int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
-    int pfds[num_cpu][2];
-
+    int pfds[processes][2];
     // Start the threads
-    for (int core=0; core<num_cpu; core++){
+    for (int core=0; core<processes; core++){
 
         // Open a pipe to communicate with our child
         if ((pipe(pfds[core]))){
@@ -215,15 +254,18 @@ int main(int argc, char *argv[]){
             exit(3);
         }
 
+        // Set up the PRNG
+        if (static_prng){ srand(core); } else { srand(time(NULL)+core); }
+
         // Child runs a simulation
-        if (!fork()) { simulate_x_games(trials/num_cpu, pfds[core][1]); }
+        if (!fork()) { simulate_x_games(trials/processes, pfds[core][1]); }
     }
 
     // A place to read in the results from the children
     unsigned long tmpray[num_players+1];
 
     // Wait for our children to complete
-    for (int core=0; core<num_cpu; core++){
+    for (int core=0; core<processes; core++){
 
         // Read results of one simulation process
         if (!read(pfds[core][0], &(tmpray), sizeof(winray))){
@@ -238,11 +280,11 @@ int main(int argc, char *argv[]){
 
     // Print the results
     for (int i=0; i<num_players; i++){
-        printf("Player %d: %.2f\n", i, winray[i]/((double)((trials/num_cpu)*num_cpu))*100);
+        printf("Player %d: %.2f\n", i, winray[i]/((double)((trials/processes)*processes))*100);
     }
-    printf("Rollovers: %.2f\n", winray[num_players]/((double)((trials/num_cpu)*num_cpu))*100);
+    printf("Rollovers: %.2f\n", winray[num_players]/((double)((trials/processes)*processes))*100);
 
-    return 0;
+    exit(0);
 }
 
 
