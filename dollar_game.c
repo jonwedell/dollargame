@@ -8,6 +8,12 @@ int init_dollars = 3;
 int dice = 3;
 int num_players;
 
+//#define skiprandom 1
+#ifdef skiprandom
+int rolls[100000];
+int next_roll = 0;
+#endif
+
 // Print the number of dollar on the table
 void print_dollars(int players[]){
     for (int i=0; i<num_players; i++){
@@ -55,7 +61,12 @@ void do_roll(int players[], int active_player, int * dollars_remaining){
     for (int each_dollar=0; each_dollar < cutoff; each_dollar++){
 
         // Roll the dice
+        #ifdef skiprandom
+        int roll = rolls[next_roll];
+        if (++next_roll >= 100000){next_roll = 0;}
+        #else
         int roll = rand() % 6;
+        #endif
 
         // Only proceed here if they lost money
         if (roll > 2){
@@ -131,8 +142,13 @@ int simulate_game(int playray[], int active_player, int remaining_dollars){
 int main(int argc, char *argv[]){
 
     // Initialize the PRNG
-    //srand(time(NULL));
-    srand(0);
+    srand(time(NULL));
+    //srand(0);
+
+    #ifdef skiprandom
+    // Test fixed roll array
+    for (int i=0; i<100000; i++){ rolls[i] = rand() % 6;}
+    #endif
 
     // Verify the user input and convert it to a long
     if ((argc != 2) || (!sscanf (argv[1],"%d",&num_players))){
@@ -153,6 +169,11 @@ int main(int argc, char *argv[]){
         // Initialize the game
         for(int i=0;i<num_players;i++){ playray[i] = init_dollars;}
 
+        #ifdef skiprandom
+        // Go to a random point in the random simulator
+        next_roll = rand() % 99999;
+        #endif
+
         // Roll until there is one person left
         winray[simulate_game(playray, 0, num_players * init_dollars)]++;
     }
@@ -165,4 +186,5 @@ int main(int argc, char *argv[]){
 
     return 0;
 }
+
 
