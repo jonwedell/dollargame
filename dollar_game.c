@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <errno.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 unsigned long trials = 5000000;
 
 int init_dollars = 3;
@@ -120,36 +125,18 @@ struct player * simulate_game(struct player *  active_player){
     }
 }
 
-// Main method
-int main(int argc, char *argv[]){
 
-    // Initialize the PRNG
-    srand(time(NULL));
-    //srand(0);
+// Simulate a number of games.
+void simulate_x_games(int x, int pipe){
 
-    // Verify the user input and convert it to a long
-    if ((argc < 2) || (!sscanf (argv[1],"%d",&num_players))){
-        printf("Specify number of players as argument!\n");
-        return 1;
-    }
-
-    // Allow them to specify the number of trials
-    if (argc == 3){
-        if (!sscanf(argv[2],"%lu",&trials)){
-            printf("If you specify a second argument it must be the number of trials.\n");
-            return 2;
-        }
-    }
-
-    // Keep track of the results
+    // Keep track of game winners
     unsigned long winray[num_players+1];
     for(int i=0;i<num_players+1;i++){ winray[i] = 0;}
 
     // Keep track of an ongoing game
     struct player players[num_players];
 
-    // Loop through the trials
-    for (int trial=0; trial<trials; trial++){
+    for (int n=0; n<x; n++){
 
         // Initialize the game
         for(int i=0;i<num_players;i++){players[i].dollars = init_dollars; }
@@ -179,11 +166,81 @@ int main(int argc, char *argv[]){
         }
     }
 
+
+    // Send the results back
+    if (!write(pipe, &winray, sizeof(winray))){
+        printf("Error while returning simulation results to our parent.\n");
+        exit(3);
+    }
+    exit(0);
+}
+
+
+// Main method
+int main(int argc, char *argv[]){
+
+    // Initialize the PRNG
+    srand(time(NULL));
+    //srand(0);
+
+    // Verify the user input and convert it to a long
+    if ((argc < 2) || (!sscanf (argv[1],"%d",&num_players))){
+        printf("Specify number of players as argument!\n");
+        return 1;
+    }
+
+    // Allow them to specify the number of trials
+    if (argc == 3){
+        if (!sscanf(argv[2],"%lu",&trials)){
+            printf("If you specify a second argument it must be the number of trials.\n");
+            return 2;
+        }
+    }
+
+
+    // Keep track of the results
+    unsigned long winray[num_players+1];
+    for(int i=0;i<num_players+1;i++){ winray[i] = 0;}
+
+
+    int num_cpu = sysconf(_SC_NPROCESSORS_ONLN);
+    int pfds[num_cpu][2];
+
+    // Start the threads
+    for (int core=0; core<num_cpu; core++){
+
+        // Open a pipe to communicate with our child
+        if ((pipe(pfds[core]))){
+            printf("Could not open pipe to communicate with child.\n");
+            exit(3);
+        }
+
+        // Child runs a simulation
+        if (!fork()) { simulate_x_games(trials/num_cpu, pfds[core][1]); }
+    }
+
+    // A place to read in the results from the children
+    unsigned long tmpray[num_players+1];
+
+    // Wait for our children to complete
+    for (int core=0; core<num_cpu; core++){
+
+        // Read results of one simulation process
+        if (!read(pfds[core][0], &(tmpray), sizeof(winray))){
+            printf("Could not read simulation results from child.\n");
+            exit(4);
+        }
+
+        // Add this thread's results onto the total results
+        for (int i=0; i<num_players+1; i++){ winray[i] += tmpray[i];}
+        wait(NULL);
+    }
+
     // Print the results
     for (int i=0; i<num_players; i++){
-        printf("Player %d: %.2f\n", i, winray[i]/((double)trials)*100);
+        printf("Player %d: %.2f\n", i, winray[i]/((double)((trials/num_cpu)*num_cpu))*100);
     }
-    printf("Rollovers: %.2f\n", winray[num_players]/((double)trials)*100);
+    printf("Rollovers: %.2f\n", winray[num_players]/((double)((trials/num_cpu)*num_cpu))*100);
 
     return 0;
 }
