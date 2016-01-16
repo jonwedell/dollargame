@@ -10,15 +10,19 @@ from multiprocessing import Process, Pipe, cpu_count
 parser = argparse.ArgumentParser(version="0.0.1")
 
 # Get the start up arguments
-parser.add_argument("--trials", help="How many simulations to run?", action="store", type=int, default=1000)
-parser.add_argument("--players", help="How many players are there?", action="store", type=int, default=10)
-parser.add_argument("--dollars", help="How many dollars do players start with.", action="store", type=int, default=3)
-parser.add_argument("--dice", help="The maximum number of dice rolled.", action="store", type=int, default=3)
+parser.add_argument("-t", "--trials", help="How many simulations to run?", action="store", type=int, default=1000)
+parser.add_argument("-p", "--players", help="How many players are there?", action="store", type=int, default=10)
+parser.add_argument("-d", "--dollars", help="How many dollars do players start with.", action="store", type=int, default=3)
+parser.add_argument("-i", "--dice", help="The maximum number of dice rolled.", action="store", type=int, default=3)
 parser.add_argument("--ordering", help="Clockwise or counter clockwise?", action="store", type=str, choices={"clockwise", "counterclockwise"}, default="clockwise")
-parser.add_argument("--single-process", help="Disable multiprocess operation.", action="store_true", default=False)
+parser.add_argument("-c", "--num_processors", help="The number of processors to use.", action="store", type=int, default=cpu_count())
+parser.add_argument("-s", "--static", help="Specify a PRNG seed.", action="store", type=int, default=None)
 
 # Parse the arguments
 args = parser.parse_args()
+
+rand_source = random.Random()
+rand_source.seed(args.static)
 
 class Player(object):
 
@@ -31,7 +35,7 @@ class Player(object):
     def roll(self):
         pot_change = 0
         for dollar in range(0,min(self.dollars,args.dice)):
-            action = random.randint(1,6)
+            action = rand_source.randint(1,6)
             if action > 3:
                 self.dollars -= 1
                 if action == 4:
@@ -159,7 +163,7 @@ winning_stats = [0] * args.players
 rollovers = 0
 
 # Change behavior based on threads
-if args.single_process is True:
+if args.num_processors == 1:
 
     # Do all the simulations here
     for x in range(0,args.trials):
@@ -190,11 +194,11 @@ else:
 
     processes = []
 
-    for x in range(0,cpu_count()):
+    for x in range(0,args.num_processors):
         # Set up the pipes
         parent_conn, child_conn = Pipe()
         # Start the process
-        p = Process(target=simulateXGames, args=(child_conn,args.trials/cpu_count()))
+        p = Process(target=simulateXGames, args=(child_conn,args.trials/args.num_processors))
         processes.append([p, parent_conn, child_conn])
         p.start()
 
@@ -207,7 +211,8 @@ else:
 
 
 # Print results
+print "Trials: %d" % args.trials
 for x in range(0,args.players):
-    print "Player %d: %f" % (x, float(winning_stats[x])/args.trials*100)
-print "Rollovers: %f" % (float(rollovers)/args.trials*100)
+    print "Player %d: %2.2f" % (x, float(winning_stats[x])/args.trials*100)
+print "Rollovers: %2.2f" % (float(rollovers)/args.trials*100)
 

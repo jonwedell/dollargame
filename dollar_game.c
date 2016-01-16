@@ -213,7 +213,7 @@ int main(int argc, char *argv[]){
             case 'h':
                 printf("dollar_game [options]\n\
     Options:\n\
-        -c num_processes\n\
+        -c num_processors\n\
         -d starting_dollars\n\
         -i num_dice\n\
         -p num_players\n\
@@ -277,6 +277,9 @@ int main(int argc, char *argv[]){
         for (int i=0; i<num_players+1; i++){ winray[i] += tmpray[i];}
         wait(NULL);
     }
+
+    // Print the number of trials
+    printf("Trials: %lu\n", trials);
 
     // Print the results
     for (int i=0; i<num_players; i++){
