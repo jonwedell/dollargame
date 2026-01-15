@@ -30,26 +30,28 @@ struct player {
 
 
 // Fast PRNG (xorshift128+)
-uint64_t prng_state[2];
+static uint64_t prng_state[2];
 
-void prng_seed(uint64_t seed){
+static void prng_seed(uint64_t seed){
     prng_state[0] = seed;
     prng_state[1] = seed ^ 0x123456789ABCDEF0ULL;
 }
 
-int fast_rand6(void){
+// Returns a value 0-5 using Lemire's multiply-shift instead of modulo
+static inline int fast_rand6(void){
     uint64_t s1 = prng_state[0];
     uint64_t s0 = prng_state[1];
     uint64_t result = s0 + s1;
     prng_state[0] = s0;
     s1 ^= s1 << 23;
     prng_state[1] = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5);
-    return result % 6;
+    // Lemire's method: multiply by 6 and take high bits (faster than % 6)
+    return (int)(((result & 0xFFFFFFFF) * 6ULL) >> 32);
 }
 
 
-// Print the number of dollar on the table
-void print_dollars(struct player * active_player){
+// Print the number of dollars on the table (for debugging)
+static void print_dollars(struct player * active_player){
     struct player * cur_player = active_player;
     int ordinal = 0;
 
@@ -61,7 +63,7 @@ void print_dollars(struct player * active_player){
 }
 
 // Do one roll for the given player
-void do_roll(struct player * active_player){
+static inline void do_roll(struct player * active_player){
 
     // Only roll the number of dollars, or dice, whichever is lower
     int cutoff = active_player->dollars < dice ? active_player->dollars : dice;
@@ -125,7 +127,7 @@ void do_roll(struct player * active_player){
 
 
 // Simulate a game to its conclusion. Return winning player, or NULL if draw.
-struct player * simulate_game(struct player * active_player){
+static struct player * simulate_game(struct player * active_player){
     while (1) {
         // Have people take turns until there is only one player left
         while (active_player->next_money != active_player){
@@ -148,7 +150,7 @@ struct player * simulate_game(struct player * active_player){
 
 
 // Simulate a number of games.
-void simulate_x_games(int x, int pipe){
+static void simulate_x_games(int x, int pipe_fd){
 
     // Keep track of game winners
     unsigned long winray[num_players+1];
@@ -189,7 +191,7 @@ void simulate_x_games(int x, int pipe){
 
 
     // Send the results back
-    if (write(pipe, &winray, sizeof(winray)) != sizeof(winray)){
+    if (write(pipe_fd, &winray, sizeof(winray)) != sizeof(winray)){
         printf("Error while returning simulation results to our parent.\n");
         exit(3);
     }
