@@ -1,6 +1,7 @@
 // Basics
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 // To initialize the PRNG
 #include <time.h>
@@ -28,6 +29,25 @@ struct player {
 };
 
 
+// Fast PRNG (xorshift128+)
+uint64_t prng_state[2];
+
+void prng_seed(uint64_t seed){
+    prng_state[0] = seed;
+    prng_state[1] = seed ^ 0x123456789ABCDEF0ULL;
+}
+
+int fast_rand6(void){
+    uint64_t s1 = prng_state[0];
+    uint64_t s0 = prng_state[1];
+    uint64_t result = s0 + s1;
+    prng_state[0] = s0;
+    s1 ^= s1 << 23;
+    prng_state[1] = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5);
+    return result % 6;
+}
+
+
 // Print the number of dollar on the table
 void print_dollars(struct player * active_player){
     struct player * cur_player = active_player;
@@ -49,7 +69,7 @@ void do_roll(struct player * active_player){
     for (int each_dollar=0; each_dollar < cutoff; each_dollar++){
 
         // Roll the dice
-        int roll = rand() % 6;
+        int roll = fast_rand6();
 
         // Only proceed here if they lost money
         if (roll > 2){
@@ -104,29 +124,25 @@ void do_roll(struct player * active_player){
 }
 
 
-// Little recursive method to see a game to it's conclusion. Return winning player, or numplayers if draw.
-struct player * simulate_game(struct player *  active_player){
-
-    // Have people take turns until there is only one player left
-    while (active_player->next_money != active_player){
-        do_roll(active_player);
-        active_player = active_player->next_money;
-    }
-
-    // Do the "final" role
-    do_roll(active_player);
-
-    // If they are still the only player
-    if (active_player->next_money == active_player){
-        if (active_player->dollars != 0){
-            return active_player;
-        } else {
-            return NULL;
+// Simulate a game to its conclusion. Return winning player, or NULL if draw.
+struct player * simulate_game(struct player * active_player){
+    while (1) {
+        // Have people take turns until there is only one player left
+        while (active_player->next_money != active_player){
+            do_roll(active_player);
+            active_player = active_player->next_money;
         }
 
-    // We need to do more rolls, somebody else has money
-    } else {
-        return simulate_game(active_player->next_money);
+        // Do the "final" roll
+        do_roll(active_player);
+
+        // If they are still the only player
+        if (active_player->next_money == active_player){
+            return active_player->dollars != 0 ? active_player : NULL;
+        }
+
+        // Someone else has money, continue the game
+        active_player = active_player->next_money;
     }
 }
 
@@ -255,7 +271,7 @@ int main(int argc, char *argv[]){
         }
 
         // Set up the PRNG
-        if (static_prng){ srand(core); } else { srand(time(NULL)+core); }
+        if (static_prng){ prng_seed(core); } else { prng_seed(time(NULL)+core); }
 
         // Child runs a simulation
         if (!fork()) { simulate_x_games(trials/processes, pfds[core][1]); }
