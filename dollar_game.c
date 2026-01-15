@@ -173,7 +173,7 @@ void simulate_x_games(int x, int pipe){
 
 
     // Send the results back
-    if (!write(pipe, &winray, sizeof(winray))){
+    if (write(pipe, &winray, sizeof(winray)) != sizeof(winray)){
         printf("Error while returning simulation results to our parent.\n");
         exit(3);
     }
@@ -222,7 +222,7 @@ int main(int argc, char *argv[]){
         exit(0);
                 break;
             case '?':
-                if ( (optopt == 'i') || (optopt == 'd') || (optopt == 't') || (optopt == 'p')){
+                if ( (optopt == 'i') || (optopt == 'd') || (optopt == 't') || (optopt == 'p') || (optopt == 'c')){
                     fprintf (stderr, "Option -%c requires an argument.\n", optopt);
                 } else {
                     fprintf (stderr, "Unknown option `-%c'.\n", optopt);
@@ -268,7 +268,7 @@ int main(int argc, char *argv[]){
     for (int core=0; core<processes; core++){
 
         // Read results of one simulation process
-        if (!read(pfds[core][0], &(tmpray), sizeof(winray))){
+        if (read(pfds[core][0], &(tmpray), sizeof(winray)) != sizeof(winray)){
             printf("Could not read simulation results from child.\n");
             exit(4);
         }
